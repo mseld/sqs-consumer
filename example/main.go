@@ -1,8 +1,11 @@
 package main
 
 import (
+	"context"
 	"fmt"
-	"runtime"
+	"os"
+	"os/signal"
+	"syscall"
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/session"
@@ -17,21 +20,31 @@ func main() {
 	awsSession := session.Must(session.NewSession())
 	sqsInstance := sqs.New(awsSession, config)
 
-	// ctx, cancel := context.WithCancel(context.Background())
+	_, cancel := context.WithCancel(context.Background())
 	// defer cancel()
 
-	sqsConsumer := consumer.New(sqsInstance, &consumer.Config{
+	Consumer := consumer.New(sqsInstance, &consumer.Config{
 		Region:            "eu-west-1",
 		QueueUrl:          "https://sqs.eu-west-1.amazonaws.com/763224933484/sam-test",
 		BatchSize:         10,
 		WaitTimeSeconds:   10,
 		VisibilityTimeout: 30,
-		PollingWaitTimeMs: 100,
+		PollingWaitTimeMs: 1000,
+		EnableDebug:       true,
 	})
 
-	sqsConsumer.Worker(consumer.HandlerFunc(handler))
-	sqsConsumer.Start()
-	runtime.Goexit()
+	Consumer.Worker(consumer.HandlerFunc(handler))
+
+	termChan := make(chan os.Signal, 1)
+	signal.Notify(termChan, syscall.SIGINT, syscall.SIGTERM)
+
+	<-termChan
+	// Handle shutdown
+	fmt.Println("--> Shutdown signal received")
+	cancel()
+
+	fmt.Println("All workers done, shutting down!")
+	// runtime.Goexit()
 }
 
 func handler(record *sqs.Message) error {

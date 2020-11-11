@@ -1,8 +1,9 @@
 # sqs-consumer
+
 sqs-consumer
 
-
 ### Example
+
 ```go
 func main() {
 	config := aws.NewConfig().WithRegion("eu-west-1").WithMaxRetries(3)
@@ -33,6 +34,5 @@ func (job *JobWorker) HandleMessage(record *sqs.Message) error {
 ```
 
 ### ROAD MAP
-- Listen to context cancellation
-- Enable/Disable print debug logs based on configuration flag
-- Implement Close to allow the process to exit gracefully
+
+-   Listen to context cancellation

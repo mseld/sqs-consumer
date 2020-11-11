@@ -9,6 +9,10 @@ const (
 	BatchSize int64 = 10
 	// WaitTimeSeconds for each poll
 	WaitTimeSeconds int64 = 20
+
+	INFO  string = "INFO "
+	WARN  string = "WARN "
+	ERROR string = "ERROR"
 )
 
 // SqsClient sqs client
@@ -22,7 +26,7 @@ type Consumer struct {
 	closed   bool
 	poolSize int
 	config   *Config
-	mq      ISqsClient
+	mq       ISqsClient
 }
 
 type Config struct {
@@ -32,4 +36,5 @@ type Config struct {
 	WaitTimeSeconds   int64
 	VisibilityTimeout int64
 	PollingWaitTimeMs int
+	EnableDebug       bool
 }

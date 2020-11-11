@@ -1,6 +1,7 @@
 package consumer
 
 import (
+	"errors"
 	"fmt"
 	"sync"
 	"time"
@@ -32,10 +33,10 @@ func New(sqs *sqs.SQS, config *Config) IConsumer {
 
 	consumer := &Consumer{
 		closed:   false,
-		paused:   true,
+		paused:   false,
 		poolSize: 0,
 		config:   config,
-		mq:    NewSQSClient(sqs, config),
+		mq:       NewSQSClient(sqs, config),
 	}
 
 	return consumer
@@ -61,20 +62,19 @@ func (consumer *Consumer) Worker(h Handler) {
 			messages, err := consumer.mq.ReceiveMessage()
 
 			if err != nil {
-				fmt.Println("Receive Message Error : ", err.Error())
+				consumer.debug(ERROR, "Receive Message", err)
 				time.Sleep(time.Millisecond * time.Duration(consumer.config.PollingWaitTimeMs))
 				continue
 			}
 
 			if len(messages) == 0 {
-				fmt.Println("Queue Empty")
+				consumer.debug(INFO, "Receive Message", errors.New("Queue is Empty"))
 				time.Sleep(time.Millisecond * time.Duration(consumer.config.PollingWaitTimeMs))
 				continue
 			}
 
 			consumer.run(h, messages)
 		}
-		time.Sleep(time.Millisecond * time.Duration(consumer.config.PollingWaitTimeMs))
 	}
 }
 
@@ -87,7 +87,7 @@ func (consumer *Consumer) run(h Handler, messages []*sqs.Message) {
 		go func(m *sqs.Message) {
 			defer wg.Done()
 			if err := consumer.handleMessage(m, h); err != nil {
-				fmt.Println("Handle Message Error : ", err.Error())
+				consumer.debug(ERROR, "Handle Message", err)
 			}
 		}(message)
 	}
@@ -129,4 +129,10 @@ func (consumer *Consumer) Closed() bool {
 // Running check if the mq client is running
 func (consumer *Consumer) Running() bool {
 	return !consumer.Paused() && !consumer.Closed()
+}
+
+func (consumer *Consumer) debug(level string, message string, err error) {
+	if consumer.config.EnableDebug {
+		fmt.Println(time.Now().Format(time.RFC3339), level, message, "-", err.Error())
+	}
 }
