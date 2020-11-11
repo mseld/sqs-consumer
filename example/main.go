@@ -17,23 +17,20 @@ func main() {
 	awsSession := session.Must(session.NewSession())
 	sqsInstance := sqs.New(awsSession, config)
 
-	// ctx context.Context
-	// ctx := context.Background()
-
 	// ctx, cancel := context.WithCancel(context.Background())
 	// defer cancel()
 
 	sqsConsumer := consumer.New(sqsInstance, &consumer.Config{
 		Region:            "eu-west-1",
-		QueueUrl:          "https://sqs.eu-west-1.amazonaws.com/763224933484/SAM-TEST",
+		QueueUrl:          "https://sqs.eu-west-1.amazonaws.com/763224933484/sam-test",
 		BatchSize:         10,
 		WaitTimeSeconds:   10,
 		VisibilityTimeout: 30,
 		PollingWaitTimeMs: 100,
 	})
 
-	sqsConsumer.Start(consumer.HandlerFunc(handler))
-
+	sqsConsumer.Worker(consumer.HandlerFunc(handler))
+	sqsConsumer.Start()
 	runtime.Goexit()
 }
 

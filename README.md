@@ -34,4 +34,5 @@ func (job *JobWorker) HandleMessage(record *sqs.Message) error {
 
 ### ROAD MAP
 - Listen to context cancellation
--
+- Enable/Disable print debug logs based on configuration flag
+- Implement Close to allow the process to exit gracefully
