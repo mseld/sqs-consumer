@@ -8,6 +8,11 @@ import (
 
 // ISqsClient interface
 type ISqsClient interface {
+	WithSqsClient(sqs *sqs.SQS) *SqsClient
+	WithQueueUrl(queueUrl string) *SqsClient
+	WithBatchSize(batchSize int64) *SqsClient
+	WithWaitTimeSeconds(waitTimeSeconds int64) *SqsClient
+	WithVisibilityTimeout(visibilityTimeout int64) *SqsClient
 	GetQueueUrl(queueName string) string
 	GetQueueUrlWithContext(ctx context.Context, queueName string) string
 	ReceiveMessage() ([]*sqs.Message, error)
@@ -25,12 +30,18 @@ type ISqsClient interface {
 }
 
 type IConsumer interface {
-	Start()
+	Resume()
 	Pause()
 	Close()
 	Paused() bool
 	Closed() bool
 	Running() bool
 	Worker(h Handler)
-	WorkerPool(poolSize int, h Handler)
+	WorkerPool(h Handler, poolSize int)
+	WithInterval(interval int) *Consumer
+	WithEnableDebug(enabled bool) *Consumer
+	WithBatchSize(batchSize int64) *Consumer
+	WithContext(ctx context.Context) *Consumer
+	WithWaitTimeSeconds(waitTimeSeconds int64) *Consumer
+	WithVisibilityTimeout(visibilityTimeout int64) *Consumer
 }

@@ -7,8 +7,6 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/sqs"
 	"github.com/mseld/sqs-consumer/consumer"
 )
@@ -16,26 +14,23 @@ import (
 func main() {
 	fmt.Println("Process Running...")
 
-	config := aws.NewConfig().WithRegion("eu-west-1").WithMaxRetries(3)
-	awsSession := session.Must(session.NewSession())
-	sqsInstance := sqs.New(awsSession, config)
+	client := NewSqsClient()
 
-	_, cancel := context.WithCancel(context.Background())
-	// defer cancel()
+	ctx, cancel := context.WithCancel(context.Background())
 
-	Consumer := consumer.New(sqsInstance, &consumer.Config{
-		Region:            "eu-west-1",
-		QueueUrl:          "https://sqs.eu-west-1.amazonaws.com/763224933484/sam-test",
-		BatchSize:         10,
-		WaitTimeSeconds:   10,
-		VisibilityTimeout: 30,
-		PollingWaitTimeMs: 1000,
-		EnableDebug:       true,
-	})
+	defer cancel()
 
-	Consumer.Worker(consumer.HandlerFunc(handler))
+	queueUrl := "https://sqs.eu-west-1.amazonaws.com/0000000000000/queue-name"
 
-	Consumer.Start()
+	consumerWorker := consumer.New(client, queueUrl).
+		WithContext(ctx).
+		WithBatchSize(10).
+		WithWaitTimeSeconds(3).
+		WithVisibilityTimeout(30).
+		WithInterval(100).
+		WithEnableDebug(true)
+
+	consumerWorker.Worker(consumer.HandlerFunc(handler))
 
 	termChan := make(chan os.Signal, 1)
 	signal.Notify(termChan, syscall.SIGINT, syscall.SIGTERM)
@@ -43,13 +38,11 @@ func main() {
 	<-termChan
 	// Handle shutdown
 	fmt.Println("--> Shutdown signal received")
-	cancel()
-
+	// cancel()
 	fmt.Println("All workers done, shutting down!")
-	// runtime.Goexit()
 }
 
-func handler(record *sqs.Message) error {
+func handler(ctx context.Context, record *sqs.Message) error {
 	fmt.Println("Received a new message : ", record.MessageId, record)
 
 	fmt.Println("Do stuff...")

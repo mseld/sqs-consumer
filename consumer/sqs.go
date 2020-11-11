@@ -5,15 +5,53 @@ import (
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/service/sqs"
+	"github.com/aws/aws-sdk-go/service/sqs/sqsiface"
 )
 
+// SqsClient sqs client
+type SqsClient struct {
+	QueueUrl          string
+	BatchSize         int64
+	WaitTimeSeconds   int64
+	VisibilityTimeout int64
+	SQS               sqsiface.SQSAPI
+}
+
 // NewSQSClient create new sqs client
-func NewSQSClient(sqs *sqs.SQS, config *Config) ISqsClient {
+func NewSQSClient(sqs *sqs.SQS, queueUrl string) ISqsClient {
 	client := &SqsClient{
-		Config: config,
-		SQS:    sqs,
+		QueueUrl:          queueUrl,
+		BatchSize:         10,
+		WaitTimeSeconds:   20,
+		VisibilityTimeout: 30,
+		SQS:               sqs,
 	}
 
+	return client
+}
+
+func (client *SqsClient) WithSqsClient(sqs *sqs.SQS) *SqsClient {
+	client.SQS = sqs
+	return client
+}
+
+func (client *SqsClient) WithQueueUrl(queueUrl string) *SqsClient {
+	client.QueueUrl = queueUrl
+	return client
+}
+
+func (client *SqsClient) WithBatchSize(batchSize int64) *SqsClient {
+	client.BatchSize = batchSize
+	return client
+}
+
+func (client *SqsClient) WithWaitTimeSeconds(waitTimeSeconds int64) *SqsClient {
+	client.WaitTimeSeconds = waitTimeSeconds
+	return client
+}
+
+func (client *SqsClient) WithVisibilityTimeout(visibilityTimeout int64) *SqsClient {
+	client.VisibilityTimeout = visibilityTimeout
 	return client
 }
 
@@ -29,7 +67,6 @@ func (client *SqsClient) GetQueueUrlWithContext(ctx context.Context, queueName s
 	}
 
 	response, err := client.SQS.GetQueueUrlWithContext(ctx, params)
-
 	if err != nil {
 		return ""
 	}
@@ -52,14 +89,13 @@ func (client *SqsClient) ReceiveMessageWithContext(ctx context.Context) ([]*sqs.
 		MessageAttributeNames: []*string{
 			aws.String(sqs.QueueAttributeNameAll),
 		},
-		QueueUrl:            aws.String(client.Config.QueueUrl),
-		MaxNumberOfMessages: aws.Int64(client.Config.BatchSize),
-		VisibilityTimeout:   aws.Int64(client.Config.VisibilityTimeout),
-		WaitTimeSeconds:     aws.Int64(client.Config.WaitTimeSeconds),
+		QueueUrl:            aws.String(client.QueueUrl),
+		MaxNumberOfMessages: aws.Int64(client.BatchSize),
+		VisibilityTimeout:   aws.Int64(client.VisibilityTimeout),
+		WaitTimeSeconds:     aws.Int64(client.WaitTimeSeconds),
 	}
 
 	result, err := client.SQS.ReceiveMessageWithContext(ctx, params)
-
 	return result.Messages, err
 }
 
@@ -71,7 +107,7 @@ func (client *SqsClient) SendMessage(message string, delaySeconds int64) (*sqs.S
 // SendMessageWithContext send message to sqs queue
 func (client *SqsClient) SendMessageWithContext(ctx context.Context, message string, delaySeconds int64) (*sqs.SendMessageOutput, error) {
 	params := &sqs.SendMessageInput{
-		QueueUrl:     aws.String(client.Config.QueueUrl),
+		QueueUrl:     aws.String(client.QueueUrl),
 		DelaySeconds: aws.Int64(delaySeconds),
 		MessageBody:  aws.String(message),
 	}
@@ -86,12 +122,11 @@ func (client *SqsClient) DeleteMessage(message *sqs.Message) error {
 // DeleteMessageWithContext delete message from sqs queue
 func (client *SqsClient) DeleteMessageWithContext(ctx context.Context, message *sqs.Message) error {
 	params := &sqs.DeleteMessageInput{
-		QueueUrl:      aws.String(client.Config.QueueUrl),
+		QueueUrl:      aws.String(client.QueueUrl),
 		ReceiptHandle: message.ReceiptHandle,
 	}
 
 	_, err := client.SQS.DeleteMessageWithContext(ctx, params)
-
 	return err
 }
 
@@ -103,7 +138,7 @@ func (client *SqsClient) DeleteMessageBatch(messages []*sqs.Message) error {
 // DeleteMessageBatchWithContext delete messages from sqs queue
 func (client *SqsClient) DeleteMessageBatchWithContext(ctx context.Context, messages []*sqs.Message) error {
 	params := &sqs.DeleteMessageBatchInput{
-		QueueUrl: aws.String(client.Config.QueueUrl),
+		QueueUrl: aws.String(client.QueueUrl),
 	}
 
 	for _, message := range messages {
@@ -114,7 +149,6 @@ func (client *SqsClient) DeleteMessageBatchWithContext(ctx context.Context, mess
 	}
 
 	_, err := client.SQS.DeleteMessageBatchWithContext(ctx, params)
-
 	return err
 }
 
@@ -126,13 +160,12 @@ func (client *SqsClient) TerminateVisibilityTimeout(message *sqs.Message) error 
 // TerminateVisibilityTimeoutWithContext make message visible to be processed from another worker
 func (client *SqsClient) TerminateVisibilityTimeoutWithContext(ctx context.Context, message *sqs.Message) error {
 	params := &sqs.ChangeMessageVisibilityInput{
-		QueueUrl:          aws.String(client.Config.QueueUrl),
+		QueueUrl:          aws.String(client.QueueUrl),
 		ReceiptHandle:     message.ReceiptHandle,
 		VisibilityTimeout: aws.Int64(0),
 	}
 
 	_, err := client.SQS.ChangeMessageVisibilityWithContext(ctx, params)
-
 	return err
 }
 
@@ -144,7 +177,7 @@ func (client *SqsClient) TerminateVisibilityTimeoutBatch(messages []*sqs.Message
 // TerminateVisibilityTimeoutBatchWithContext make messages visible to be processed from another worker
 func (client *SqsClient) TerminateVisibilityTimeoutBatchWithContext(ctx context.Context, messages []*sqs.Message) error {
 	params := &sqs.ChangeMessageVisibilityBatchInput{
-		QueueUrl: aws.String(client.Config.QueueUrl),
+		QueueUrl: aws.String(client.QueueUrl),
 	}
 
 	for _, message := range messages {
@@ -156,6 +189,5 @@ func (client *SqsClient) TerminateVisibilityTimeoutBatchWithContext(ctx context.
 	}
 
 	_, err := client.SQS.ChangeMessageVisibilityBatchWithContext(ctx, params)
-
 	return err
 }

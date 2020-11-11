@@ -6,28 +6,38 @@ sqs-consumer
 
 ```go
 func main() {
-	config := aws.NewConfig().WithRegion("eu-west-1").WithMaxRetries(3)
+	config := aws.NewConfig().
+        WithRegion("eu-west-1").
+        WithMaxRetries(3)
+
 	awsSession := session.Must(session.NewSession())
-	sqsInstance := sqs.New(awsSession, config)
 
-	sqsConsumer := consumer.New(sqsInstance, &consumer.Config{
-		Region:            "eu-west-1",
-		QueueUrl:          "https://sqs.eu-west-1.amazonaws.com/123/queue",
-		BatchSize:         10,
-		WaitTimeSeconds:   10,
-		VisibilityTimeout: 30,
-		PollingWaitTimeMs: 100,
-	})
+	client := sqs.New(awsSession, config)
 
-	sqsConsumer.Start(&JobWorker{})
+	ctx, cancel := context.WithCancel(context.Background())
 
+	defer cancel()
+
+	queueUrl := "https://sqs.eu-west-1.amazonaws.com/0000000000000/queue-name"
+
+	consumerWorker := consumer.New(client, queueUrl).
+		WithContext(ctx).
+		WithBatchSize(10).
+		WithWaitTimeSeconds(3).
+		WithVisibilityTimeout(30).
+		WithInterval(100).
+		WithEnableDebug(true)
+
+	go consumerWorker.Worker(consumer.HandlerFunc(handler))
+
+	runtime.Goexit()
 }
 
 type JobWorker struct {
     Name string
 }
 
-func (job *JobWorker) HandleMessage(record *sqs.Message) error {
+func (job *JobWorker) HandleMessage(ctx context.Context, record *sqs.Message) error {
 	return nil
 }
 
