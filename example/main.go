@@ -35,6 +35,8 @@ func main() {
 
 	Consumer.Worker(consumer.HandlerFunc(handler))
 
+	Consumer.Start()
+
 	termChan := make(chan os.Signal, 1)
 	signal.Notify(termChan, syscall.SIGINT, syscall.SIGTERM)
 

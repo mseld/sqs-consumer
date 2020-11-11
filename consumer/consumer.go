@@ -58,23 +58,26 @@ func (consumer *Consumer) WorkerPool(poolSize int, h Handler) {
 // Start polling and will continue polling till the application is forcibly stopped
 func (consumer *Consumer) Worker(h Handler) {
 	for {
-		if consumer.Running() {
-			messages, err := consumer.mq.ReceiveMessage()
-
-			if err != nil {
-				consumer.debug(ERROR, "Receive Message", err)
-				time.Sleep(time.Millisecond * time.Duration(consumer.config.PollingWaitTimeMs))
-				continue
-			}
-
-			if len(messages) == 0 {
-				consumer.debug(INFO, "Receive Message", errors.New("Queue is Empty"))
-				time.Sleep(time.Millisecond * time.Duration(consumer.config.PollingWaitTimeMs))
-				continue
-			}
-
-			consumer.run(h, messages)
+		if !consumer.Running(){
+			time.Sleep(time.Millisecond * time.Duration(consumer.config.PollingWaitTimeMs))
+			continue
 		}
+
+		messages, err := consumer.mq.ReceiveMessage()
+
+		if err != nil {
+			consumer.debug(ERROR, "Receive Message", err)
+			time.Sleep(time.Millisecond * time.Duration(consumer.config.PollingWaitTimeMs))
+			continue
+		}
+
+		if len(messages) == 0 {
+			consumer.debug(INFO, "Receive Message", errors.New("Queue is Empty"))
+			time.Sleep(time.Millisecond * time.Duration(consumer.config.PollingWaitTimeMs))
+			continue
+		}
+
+		consumer.run(h, messages)
 	}
 }
 
