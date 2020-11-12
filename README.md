@@ -28,7 +28,7 @@ func main() {
 		WithInterval(100).
 		WithEnableDebug(true)
 
-	go consumerWorker.Worker(consumer.HandlerFunc(handler))
+	go consumerWorker.Worker(JobWorker)
 
 	runtime.Goexit()
 }
