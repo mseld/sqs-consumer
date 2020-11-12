@@ -43,9 +43,6 @@ func main() {
 }
 
 func handler(ctx context.Context, record *sqs.Message) error {
-	fmt.Println("Received a new message : ", record.MessageId, record)
-
-	fmt.Println("Do stuff...")
-
+	fmt.Println("Message received : ", record.MessageId, record.Body)
 	return nil
 }

@@ -17,7 +17,6 @@ type Consumer struct {
 	interval int
 	debug    bool
 	ctx      context.Context
-	// wg       *sync.WaitGroup
 	sqs ISqsClient
 }
 
@@ -135,31 +134,37 @@ func (consumer *Consumer) WorkerPool(h Handler, poolSize int) {
 
 // Start polling and will continue polling till the application is forcibly stopped
 func (consumer *Consumer) Worker(h Handler) {
+	// ctx, cancel := context.WithCancel(consumer.ctx)
 	go consumer.worker(h)
 }
 
-func (consumer *Consumer) worker(h Handler)   {
+func (consumer *Consumer) worker(h Handler) {
 	for {
-		if !consumer.Running() {
-			time.Sleep(time.Millisecond * time.Duration(consumer.interval))
-			continue
+		select {
+		case <-consumer.ctx.Done():
+			return
+		default:
+			if !consumer.Running() {
+				time.Sleep(time.Millisecond * time.Duration(consumer.interval))
+				continue
+			}
+
+			messages, err := consumer.sqs.ReceiveMessageWithContext(consumer.ctx)
+
+			if err != nil {
+				consumer.print(ERROR, "Receive Message", err)
+				time.Sleep(time.Millisecond * time.Duration(consumer.interval))
+				continue
+			}
+
+			if len(messages) == 0 {
+				consumer.print(INFO, "Receive Message", errors.New("Queue is Empty"))
+				time.Sleep(time.Millisecond * time.Duration(consumer.interval))
+				continue
+			}
+
+			consumer.run(h, messages)
 		}
-
-		messages, err := consumer.sqs.ReceiveMessageWithContext(consumer.ctx)
-
-		if err != nil {
-			consumer.print(ERROR, "Receive Message", err)
-			time.Sleep(time.Millisecond * time.Duration(consumer.interval))
-			continue
-		}
-
-		if len(messages) == 0 {
-			consumer.print(INFO, "Receive Message", errors.New("Queue is Empty"))
-			time.Sleep(time.Millisecond * time.Duration(consumer.interval))
-			continue
-		}
-
-		consumer.run(h, messages)
 	}
 }
 

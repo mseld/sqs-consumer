@@ -18,7 +18,7 @@ func main() {
 
 	defer cancel()
 
-	queueUrl := "https://sqs.eu-west-1.amazonaws.com/0000000000000/queue-name"
+	queueUrl := "https://sqs.eu-west-1.amazonaws.com/0000000000000/queue"
 
 	consumerWorker := consumer.New(client, queueUrl).
 		WithContext(ctx).
@@ -28,7 +28,9 @@ func main() {
 		WithInterval(100).
 		WithEnableDebug(true)
 
-	go consumerWorker.Worker(JobWorker)
+    worker := JobWorker{}
+
+	consumerWorker.Worker(worker)
 
 	runtime.Goexit()
 }
@@ -38,6 +40,7 @@ type JobWorker struct {
 }
 
 func (job *JobWorker) HandleMessage(ctx context.Context, record *sqs.Message) error {
+    // ...
 	return nil
 }
 
