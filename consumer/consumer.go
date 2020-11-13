@@ -170,9 +170,8 @@ func (consumer *Consumer) worker(h Handler) {
 
 // run launches goroutine per received message and wait for all message to be processed
 func (consumer *Consumer) run(h Handler, messages []*sqs.Message) {
-	var wg *sync.WaitGroup
-	numMessages := len(messages)
-	wg.Add(numMessages)
+	wg := &sync.WaitGroup{}
+	wg.Add(len(messages))
 	for _, message := range messages {
 		go func(m *sqs.Message) {
 			defer wg.Done()
