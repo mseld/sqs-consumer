@@ -25,20 +25,24 @@ func main() {
 	consumerWorker := consumer.New(client, queueUrl).
 		WithContext(ctx).
 		WithBatchSize(10).
-		WithWaitTimeSeconds(3).
-		WithVisibilityTimeout(30).
+		WithReceiveWaitTimeSeconds(5).
+		WithReceiveVisibilityTimeout(30).
+		WithTerminateVisibilityTimeout(5).
 		WithInterval(100).
 		WithEnableDebug(true)
 
 	consumerWorker.Worker(consumer.HandlerFunc(handler))
 
-	termChan := make(chan os.Signal, 1)
-	signal.Notify(termChan, syscall.SIGINT, syscall.SIGTERM)
+	exit := make(chan os.Signal, 1)
 
-	<-termChan
-	// Handle shutdown
+	signal.Notify(exit, syscall.SIGINT, syscall.SIGTERM)
+
+	<-exit
+
 	fmt.Println("--> Shutdown signal received")
-	// cancel()
+
+	consumerWorker.Close()
+
 	fmt.Println("All workers done, shutting down!")
 }
 

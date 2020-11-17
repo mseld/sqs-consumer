@@ -71,14 +71,14 @@ func (consumer *Consumer) WithBatchSize(batchSize int64) *Consumer {
 	return consumer
 }
 
-func (consumer *Consumer) WithWaitTimeSeconds(waitTimeSeconds int64) *Consumer {
+func (consumer *Consumer) WithReceiveWaitTimeSeconds(waitSeconds int64) *Consumer {
 	if consumer.sqs != nil {
-		consumer.sqs.WithReceiveWaitTimeSeconds(waitTimeSeconds)
+		consumer.sqs.WithReceiveWaitTimeSeconds(waitSeconds)
 	}
 	return consumer
 }
 
-func (consumer *Consumer) WithVisibilityTimeout(visibilityTimeout int64) *Consumer {
+func (consumer *Consumer) WithReceiveVisibilityTimeout(visibilityTimeout int64) *Consumer {
 	if consumer.sqs != nil {
 		consumer.sqs.WithReceiveVisibilityTimeout(visibilityTimeout)
 	}

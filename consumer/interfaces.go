@@ -43,7 +43,7 @@ type IConsumer interface {
 	WithEnableDebug(enabled bool) *Consumer
 	WithBatchSize(batchSize int64) *Consumer
 	WithContext(ctx context.Context) *Consumer
-	WithWaitTimeSeconds(waitTimeSeconds int64) *Consumer
-	WithVisibilityTimeout(visibilityTimeout int64) *Consumer
+	WithReceiveWaitTimeSeconds(waitSeconds int64) *Consumer
+	WithReceiveVisibilityTimeout(visibilityTimeout int64) *Consumer
 	WithTerminateVisibilityTimeout(visibilityTimeout int64) *Consumer
 }
