@@ -2,7 +2,6 @@ package consumer
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"sync"
 	"time"
@@ -17,7 +16,7 @@ type Consumer struct {
 	interval int
 	debug    bool
 	ctx      context.Context
-	sqs ISqsClient
+	sqs      ISqsClient
 }
 
 // Handler interface
@@ -74,14 +73,21 @@ func (consumer *Consumer) WithBatchSize(batchSize int64) *Consumer {
 
 func (consumer *Consumer) WithWaitTimeSeconds(waitTimeSeconds int64) *Consumer {
 	if consumer.sqs != nil {
-		consumer.sqs.WithWaitTimeSeconds(waitTimeSeconds)
+		consumer.sqs.WithReceiveWaitTimeSeconds(waitTimeSeconds)
 	}
 	return consumer
 }
 
 func (consumer *Consumer) WithVisibilityTimeout(visibilityTimeout int64) *Consumer {
 	if consumer.sqs != nil {
-		consumer.sqs.WithVisibilityTimeout(visibilityTimeout)
+		consumer.sqs.WithReceiveVisibilityTimeout(visibilityTimeout)
+	}
+	return consumer
+}
+
+func (consumer *Consumer) WithTerminateVisibilityTimeout(visibilityTimeout int64) *Consumer {
+	if consumer.sqs != nil {
+		consumer.sqs.WithTerminateVisibilityTimeout(visibilityTimeout)
 	}
 	return consumer
 }
@@ -134,49 +140,57 @@ func (consumer *Consumer) WorkerPool(h Handler, poolSize int) {
 
 // Start polling and will continue polling till the application is forcibly stopped
 func (consumer *Consumer) Worker(h Handler) {
-	// ctx, cancel := context.WithCancel(consumer.ctx)
 	go consumer.worker(h)
 }
 
 func (consumer *Consumer) worker(h Handler) {
 	for {
+
 		select {
 		case <-consumer.ctx.Done():
 			return
 		default:
-			if !consumer.Running() {
-				time.Sleep(time.Millisecond * time.Duration(consumer.interval))
-				continue
-			}
-
-			messages, err := consumer.sqs.ReceiveMessageWithContext(consumer.ctx)
-
-			if err != nil {
-				consumer.print(ERROR, "Receive Message", err)
-				time.Sleep(time.Millisecond * time.Duration(consumer.interval))
-				continue
-			}
-
-			if len(messages) == 0 {
-				consumer.print(INFO, "Receive Message", errors.New("Queue is Empty"))
-				time.Sleep(time.Millisecond * time.Duration(consumer.interval))
-				continue
-			}
-
-			consumer.run(h, messages)
 		}
+
+		if !consumer.Running() {
+			time.Sleep(time.Millisecond * time.Duration(consumer.interval))
+			continue
+		}
+
+		messages, err := consumer.sqs.ReceiveMessageWithContext(consumer.ctx)
+
+		if err != nil {
+			consumer.logError(ERROR, "Receive Message", err)
+			time.Sleep(time.Millisecond * time.Duration(consumer.interval))
+			continue
+		}
+
+		consumer.log(INFO, fmt.Sprintf("[ %-2v ] Message Received", len(messages)))
+
+		if len(messages) == 0 {
+			time.Sleep(time.Millisecond * time.Duration(consumer.interval))
+			continue
+		}
+
+		consumer.run(h, messages)
 	}
 }
 
 // run launches goroutine per received message and wait for all message to be processed
 func (consumer *Consumer) run(h Handler, messages []*sqs.Message) {
 	wg := &sync.WaitGroup{}
-	wg.Add(len(messages))
 	for _, message := range messages {
+		select {
+		case <-consumer.ctx.Done():
+			return
+		default:
+		}
+
+		wg.Add(1)
 		go func(m *sqs.Message) {
 			defer wg.Done()
 			if err := consumer.handleMessage(m, h); err != nil {
-				consumer.print(ERROR, "Handle Message", err)
+				consumer.logError(ERROR, "Handle Message", err)
 			}
 		}(message)
 	}
@@ -191,7 +205,13 @@ func (consumer *Consumer) handleMessage(m *sqs.Message, h Handler) error {
 	return consumer.sqs.DeleteMessage(m)
 }
 
-func (consumer *Consumer) print(level string, message string, err error) {
+func (consumer *Consumer) log(level string, message string) {
+	if consumer.debug {
+		fmt.Println(time.Now().Format(time.RFC3339), level, message)
+	}
+}
+
+func (consumer *Consumer) logError(level string, message string, err error) {
 	if consumer.debug {
 		fmt.Println(time.Now().Format(time.RFC3339), level, message, "-", err.Error())
 	}

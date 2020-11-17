@@ -1,9 +1,11 @@
 package consumer
 
 const (
-	BatchSize       int64  = 10
-	WaitTimeSeconds int64  = 20
-	INFO            string = "INFO "
-	WARN            string = "WARN "
-	ERROR           string = "ERROR"
+	BatchSizeLimit                    int64  = 10
+	ReceiveMessageWaitSecondsLimit    int64  = 20
+	DefaultReceiveVisibilityTimeout   int64  = 30
+	DefaultTerminateVisibilityTimeout int64  = 0
+	INFO                              string = "INFO "
+	WARN                              string = "WARN "
+	ERROR                             string = "ERROR"
 )

@@ -11,8 +11,9 @@ type ISqsClient interface {
 	WithSqsClient(sqs *sqs.SQS) *SqsClient
 	WithQueueUrl(queueUrl string) *SqsClient
 	WithBatchSize(batchSize int64) *SqsClient
-	WithWaitTimeSeconds(waitTimeSeconds int64) *SqsClient
-	WithVisibilityTimeout(visibilityTimeout int64) *SqsClient
+	WithReceiveWaitTimeSeconds(waitSeconds int64) *SqsClient
+	WithReceiveVisibilityTimeout(visibilityTimeout int64) *SqsClient
+	WithTerminateVisibilityTimeout(visibilityTimeout int64) *SqsClient
 	GetQueueUrl(queueName string) string
 	GetQueueUrlWithContext(ctx context.Context, queueName string) string
 	ReceiveMessage() ([]*sqs.Message, error)
@@ -44,4 +45,5 @@ type IConsumer interface {
 	WithContext(ctx context.Context) *Consumer
 	WithWaitTimeSeconds(waitTimeSeconds int64) *Consumer
 	WithVisibilityTimeout(visibilityTimeout int64) *Consumer
+	WithTerminateVisibilityTimeout(visibilityTimeout int64) *Consumer
 }
