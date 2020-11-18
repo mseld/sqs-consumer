@@ -18,7 +18,7 @@ func main() {
 
 	wg := &sync.WaitGroup{}
 
-	queueUrl := "https://sqs.eu-west-1.amazonaws.com/763224933484/SAM-Chunk-Queue"
+	queueUrl := "https://sqs.eu-west-1.amazonaws.com/0000000000/demo-queue"
 
 	consumerWorker := consumer.New(client, queueUrl).
 		WithContext(ctx).

@@ -23,7 +23,7 @@ func main() {
 
 	wg := &sync.WaitGroup{}
 
-	queueUrl := "https://sqs.eu-west-1.amazonaws.com/763224933484/SAM-Chunk-Queue"
+	queueUrl := "https://sqs.eu-west-1.amazonaws.com/0000000000/demo-queue"
 
 	consumerWorker := consumer.New(client, queueUrl).
 		WithContext(ctx).
@@ -55,7 +55,7 @@ func main() {
 }
 
 func handler(ctx context.Context, record *sqs.Message) error {
-	log.Println("Message received : ", record.MessageId, record.Body)
+	log.Println("Message received : ", *record.MessageId, *record.Body)
 	time.Sleep(time.Second * 10)
 	log.Println("Message Proccessed")
 	return nil
