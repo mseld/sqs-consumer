@@ -27,6 +27,7 @@ func main() {
 
 	consumerWorker := consumer.New(client, queueUrl).
 		WithContext(ctx).
+		WithWaitGroup(wg).
 		WithBatchSize(10).
 		WithReceiveWaitTimeSeconds(5).
 		WithReceiveVisibilityTimeout(30).
@@ -38,7 +39,7 @@ func main() {
 
 	wg.Add(1)
 
-	go consumerWorker.Worker(worker, wg)
+	go consumerWorker.Worker(worker)
 
 	exit := make(chan os.Signal, 1)
 

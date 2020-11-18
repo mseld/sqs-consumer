@@ -16,12 +16,15 @@ type IConsumer interface {
 	Paused() bool
 	Closed() bool
 	Running() bool
-	Worker(h Handler, wg *sync.WaitGroup)
-	WorkerPool(h Handler, wg *sync.WaitGroup, poolSize int)
+	Context() context.Context
+	WaitGroup() *sync.WaitGroup
+	Worker(h Handler)
+	WorkerPool(h Handler, poolSize int)
+	WithWaitGroup(wg *sync.WaitGroup) *Consumer
+	WithContext(ctx context.Context) *Consumer
 	WithInterval(interval int) *Consumer
 	WithEnableDebug(enabled bool) *Consumer
 	WithBatchSize(batchSize int64) *Consumer
-	WithContext(ctx context.Context) *Consumer
 	WithReceiveWaitTimeSeconds(waitSeconds int64) *Consumer
 	WithReceiveVisibilityTimeout(visibilityTimeout int64) *Consumer
 	WithTerminateVisibilityTimeout(visibilityTimeout int64) *Consumer
@@ -32,6 +35,7 @@ type Consumer struct {
 	closed   bool
 	interval int
 	debug    bool
+	wg       *sync.WaitGroup
 	ctx      context.Context
 	sqs      ISqsClient
 }
@@ -59,186 +63,196 @@ func New(sqs *sqs.SQS, queueUrl string) IConsumer {
 		paused:   false,
 		debug:    false,
 		interval: 100,
+		wg:       &sync.WaitGroup{},
 		ctx:      context.Background(),
 		sqs:      NewSQSClient(sqs, queueUrl),
 	}
 	return consumer
 }
 
-func (consumer *Consumer) WithContext(ctx context.Context) *Consumer {
-	consumer.ctx = ctx
-	return consumer
+func (con *Consumer) WithContext(ctx context.Context) *Consumer {
+	con.ctx = ctx
+	return con
 }
 
-func (consumer *Consumer) WithInterval(ms int) *Consumer {
-	consumer.interval = ms
-	return consumer
+func (con *Consumer) WithWaitGroup(wg *sync.WaitGroup) *Consumer {
+	con.wg = wg
+	return con
 }
 
-func (consumer *Consumer) WithEnableDebug(enabled bool) *Consumer {
-	consumer.debug = enabled
-	return consumer
+func (con *Consumer) WithInterval(ms int) *Consumer {
+	con.interval = ms
+	return con
 }
 
-func (consumer *Consumer) WithBatchSize(batchSize int64) *Consumer {
-	if consumer.sqs != nil {
-		consumer.sqs.WithBatchSize(batchSize)
+func (con *Consumer) WithBatchSize(batchSize int64) *Consumer {
+	if con.sqs != nil {
+		con.sqs.WithBatchSize(batchSize)
 	}
-	return consumer
+	return con
 }
 
-func (consumer *Consumer) WithReceiveWaitTimeSeconds(waitSeconds int64) *Consumer {
-	if consumer.sqs != nil {
-		consumer.sqs.WithReceiveWaitTimeSeconds(waitSeconds)
+func (con *Consumer) WithEnableDebug(enabled bool) *Consumer {
+	con.debug = enabled
+	return con
+}
+
+func (con *Consumer) WithReceiveWaitTimeSeconds(waitSeconds int64) *Consumer {
+	if con.sqs != nil {
+		con.sqs.WithReceiveWaitTimeSeconds(waitSeconds)
 	}
-	return consumer
+	return con
 }
 
-func (consumer *Consumer) WithReceiveVisibilityTimeout(visibilityTimeout int64) *Consumer {
-	if consumer.sqs != nil {
-		consumer.sqs.WithReceiveVisibilityTimeout(visibilityTimeout)
+func (con *Consumer) WithReceiveVisibilityTimeout(visibilityTimeout int64) *Consumer {
+	if con.sqs != nil {
+		con.sqs.WithReceiveVisibilityTimeout(visibilityTimeout)
 	}
-	return consumer
+	return con
 }
 
-func (consumer *Consumer) WithTerminateVisibilityTimeout(visibilityTimeout int64) *Consumer {
-	if consumer.sqs != nil {
-		consumer.sqs.WithTerminateVisibilityTimeout(visibilityTimeout)
+func (con *Consumer) WithTerminateVisibilityTimeout(visibilityTimeout int64) *Consumer {
+	if con.sqs != nil {
+		con.sqs.WithTerminateVisibilityTimeout(visibilityTimeout)
 	}
-	return consumer
+	return con
 }
 
-func (consumer *Consumer) Context() context.Context {
-	return consumer.ctx
+func (con *Consumer) Context() context.Context {
+	return con.ctx
 }
 
-func (consumer *Consumer) Resume() {
-	consumer.paused = false
+func (con *Consumer) WaitGroup() *sync.WaitGroup {
+	return con.wg
+}
+
+func (con *Consumer) Resume() {
+	con.paused = false
 }
 
 // Stop processing
-func (consumer *Consumer) Pause() {
-	consumer.paused = true
+func (con *Consumer) Pause() {
+	con.paused = true
 }
 
 // Paused check worker is paused
-func (consumer *Consumer) Paused() bool {
-	return consumer.paused
+func (con *Consumer) Paused() bool {
+	return con.paused
 }
 
 // Close allowing the process to exit gracefully
-func (consumer *Consumer) Close() {
-	consumer.closed = true
+func (con *Consumer) Close() {
+	con.closed = true
 }
 
 // Closed check worker is closed
-func (consumer *Consumer) Closed() bool {
-	return consumer.closed
+func (con *Consumer) Closed() bool {
+	return con.closed
 }
 
 // Running check if the mq client is running
-func (consumer *Consumer) Running() bool {
-	return !consumer.Paused() && !consumer.Closed()
+func (con *Consumer) Running() bool {
+	return !con.Paused() && !con.Closed()
 }
 
 // WorkerPool worker pool
-func (consumer *Consumer) WorkerPool(h Handler, wg *sync.WaitGroup, poolSize int) {
+func (con *Consumer) WorkerPool(h Handler, poolSize int) {
 	if poolSize <= 0 {
 		poolSize = 1
 	}
 
 	for w := 1; w <= poolSize; w++ {
-		wg.Add(1)
-		go consumer.Worker(h, wg)
+		con.wg.Add(1)
+		go con.Worker(h)
 	}
 }
 
 // Worker Start polling and will continue polling till the application is forcibly stopped
-func (consumer *Consumer) Worker(h Handler, wg *sync.WaitGroup) {
-	defer wg.Done()
+func (con *Consumer) Worker(h Handler) {
+	defer con.wg.Done()
 	for {
 		select {
-		case <-consumer.ctx.Done():
+		case <-con.ctx.Done():
 			return
 		default:
 		}
 
-		if consumer.Closed() {
+		if con.Closed() {
 			return
 		}
 
-		if consumer.Paused() {
-			time.Sleep(time.Millisecond * time.Duration(consumer.interval))
+		if con.Paused() {
+			time.Sleep(time.Millisecond * time.Duration(con.interval))
 			continue
 		}
 
-		messages, err := consumer.sqs.ReceiveMessageWithContext(consumer.ctx)
+		messages, err := con.sqs.ReceiveMessageWithContext(con.ctx)
 
 		if err != nil {
-			consumer.logError(ERROR, "Receive Message", err)
-			time.Sleep(time.Millisecond * time.Duration(consumer.interval))
+			con.logError(ERROR, "Receive Message", err)
+			time.Sleep(time.Millisecond * time.Duration(con.interval))
 			continue
 		}
 
-		consumer.log(INFO, fmt.Sprintf("[ %-2v ] Message Received", len(messages)))
+		con.log(INFO, fmt.Sprintf("[ %-2v ] Message Received", len(messages)))
 
 		if len(messages) == 0 {
-			time.Sleep(time.Millisecond * time.Duration(consumer.interval))
+			time.Sleep(time.Millisecond * time.Duration(con.interval))
 			continue
 		}
 
-		consumer.run(h, messages)
+		con.run(h, messages)
 	}
 }
 
 // run launches goroutine per received message and wait for all message to be processed
-func (consumer *Consumer) run(h Handler, messages []*sqs.Message) {
+func (con *Consumer) run(h Handler, messages []*sqs.Message) {
 	wg := &sync.WaitGroup{}
 	for index, message := range messages {
 		select {
-		case <-consumer.ctx.Done():
-			consumer.terminate(messages[index:])
+		case <-con.ctx.Done():
+			con.terminate(messages[index:])
 			return
 		default:
 		}
 
-		if consumer.Closed() {
-			consumer.terminate(messages[index:])
+		if con.Closed() {
+			con.terminate(messages[index:])
 			return
 		}
 
 		wg.Add(1)
 		go func(m *sqs.Message) {
 			defer wg.Done()
-			if err := consumer.handleMessage(m, h); err != nil {
-				consumer.logError(ERROR, "Handle Message", err)
+			if err := con.handleMessage(m, h); err != nil {
+				con.logError(ERROR, "Handle Message", err)
 			}
 		}(message)
 	}
 	wg.Wait()
 }
 
-func (consumer *Consumer) terminate(messages []*sqs.Message) {
-	if err := consumer.sqs.TerminateVisibilityTimeoutBatch(messages); err != nil {
-		consumer.logError(ERROR, "Terminate Message Visibility Timeout ", err)
+func (con *Consumer) terminate(messages []*sqs.Message) {
+	if err := con.sqs.TerminateVisibilityTimeoutBatch(messages); err != nil {
+		con.logError(ERROR, "Terminate Message Visibility Timeout ", err)
 	}
 }
 
-func (consumer *Consumer) handleMessage(m *sqs.Message, h Handler) error {
-	if err := h.HandleMessage(consumer.ctx, m); err != nil {
-		return consumer.sqs.TerminateVisibilityTimeout(m)
+func (con *Consumer) handleMessage(m *sqs.Message, h Handler) error {
+	if err := h.HandleMessage(con.ctx, m); err != nil {
+		return con.sqs.TerminateVisibilityTimeout(m)
 	}
-	return consumer.sqs.DeleteMessage(m)
+	return con.sqs.DeleteMessage(m)
 }
 
-func (consumer *Consumer) log(level string, message string) {
-	if consumer.debug {
+func (con *Consumer) log(level string, message string) {
+	if con.debug {
 		fmt.Println(time.Now().Format(time.RFC3339), level, message)
 	}
 }
 
-func (consumer *Consumer) logError(level string, message string, err error) {
-	if consumer.debug {
+func (con *Consumer) logError(level string, message string, err error) {
+	if con.debug {
 		fmt.Println(time.Now().Format(time.RFC3339), level, message, "-", err.Error())
 	}
 }
