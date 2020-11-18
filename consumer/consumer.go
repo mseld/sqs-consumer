@@ -12,7 +12,6 @@ import (
 type Consumer struct {
 	paused   bool
 	closed   bool
-	poolSize int
 	interval int
 	debug    bool
 	ctx      context.Context
@@ -41,7 +40,6 @@ func New(sqs *sqs.SQS, queueUrl string) IConsumer {
 		closed:   false,
 		paused:   false,
 		debug:    false,
-		poolSize: 0,
 		interval: 100,
 		ctx:      context.Background(),
 		sqs:      NewSQSClient(sqs, queueUrl),
@@ -126,26 +124,21 @@ func (consumer *Consumer) Running() bool {
 }
 
 // WorkerPool worker pool
-func (consumer *Consumer) WorkerPool(h Handler, poolSize int) {
+func (consumer *Consumer) WorkerPool(h Handler, wg *sync.WaitGroup, poolSize int) {
 	if poolSize <= 0 {
 		poolSize = 1
 	}
 
-	consumer.poolSize = poolSize
-
 	for w := 1; w <= poolSize; w++ {
-		go consumer.worker(h)
+		wg.Add(1)
+		go consumer.Worker(h, wg)
 	}
 }
 
-// Start polling and will continue polling till the application is forcibly stopped
-func (consumer *Consumer) Worker(h Handler) {
-	go consumer.worker(h)
-}
-
-func (consumer *Consumer) worker(h Handler) {
+// Worker Start polling and will continue polling till the application is forcibly stopped
+func (consumer *Consumer) Worker(h Handler, wg *sync.WaitGroup) {
+	defer wg.Done()
 	for {
-
 		select {
 		case <-consumer.ctx.Done():
 			return
@@ -182,6 +175,7 @@ func (consumer *Consumer) run(h Handler, messages []*sqs.Message) {
 	for _, message := range messages {
 		select {
 		case <-consumer.ctx.Done():
+			// messages[i,len(messages)]
 			return
 		default:
 		}
@@ -194,8 +188,13 @@ func (consumer *Consumer) run(h Handler, messages []*sqs.Message) {
 			}
 		}(message)
 	}
-
 	wg.Wait()
+}
+
+func (consumer *Consumer) terminate(messages []*sqs.Message) {
+	if err := consumer.sqs.TerminateVisibilityTimeoutBatch(messages); err != nil {
+		consumer.logError(ERROR, "Terminate Message Visibility Timeout ", err)
+	}
 }
 
 func (consumer *Consumer) handleMessage(m *sqs.Message, h Handler) error {

@@ -2,23 +2,25 @@ package main
 
 import (
 	"context"
-	"fmt"
+	"log"
 	"os"
 	"os/signal"
+	"sync"
 	"syscall"
+	"time"
 
 	"github.com/aws/aws-sdk-go/service/sqs"
 	"github.com/mseld/sqs-consumer/consumer"
 )
 
 func main() {
-	fmt.Println("Process Running...")
+	log.Println("Worker Started")
 
 	client := NewSqsClient()
 
 	ctx, cancel := context.WithCancel(context.Background())
 
-	defer cancel()
+	wg := &sync.WaitGroup{}
 
 	queueUrl := "https://sqs.eu-west-1.amazonaws.com/0000000000000/queue-name"
 
@@ -33,19 +35,25 @@ func main() {
 
 	worker := &JobWorker{}
 
-	consumerWorker.Worker(worker)
+	wg.Add(1)
+
+	go consumerWorker.Worker(worker, wg)
 
 	exit := make(chan os.Signal, 1)
 
 	signal.Notify(exit, syscall.SIGINT, syscall.SIGTERM)
 
-	<-exit
+	sig := <-exit
 
-	fmt.Println("--> Shutdown signal received")
+	log.Println("Worker Received Shutdown Signal", sig)
+
+	cancel()
 
 	consumerWorker.Close()
 
-	fmt.Println("All workers done, shutting down!")
+	wg.Wait() // wait for all goroutines
+
+	log.Println("All workers done, shutting down!")
 }
 
 type JobWorker struct {
@@ -53,6 +61,7 @@ type JobWorker struct {
 }
 
 func (job *JobWorker) HandleMessage(ctx context.Context, record *sqs.Message) error {
-	fmt.Println("Message received : ", record.MessageId, record.Body)
+	log.Println("Message received : ", record.MessageId, record.Body)
+	time.Sleep(time.Second * 30)
 	return nil
 }

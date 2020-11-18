@@ -2,6 +2,7 @@ package consumer
 
 import (
 	"context"
+	"sync"
 
 	"github.com/aws/aws-sdk-go/service/sqs"
 )
@@ -37,8 +38,8 @@ type IConsumer interface {
 	Paused() bool
 	Closed() bool
 	Running() bool
-	Worker(h Handler)
-	WorkerPool(h Handler, poolSize int)
+	Worker(h Handler, wg *sync.WaitGroup)
+	WorkerPool(h Handler, wg *sync.WaitGroup, poolSize int)
 	WithInterval(interval int) *Consumer
 	WithEnableDebug(enabled bool) *Consumer
 	WithBatchSize(batchSize int64) *Consumer
