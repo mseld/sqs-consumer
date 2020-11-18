@@ -55,7 +55,7 @@ func main() {
 }
 
 func handler(ctx context.Context, record *sqs.Message) error {
-	log.Println("Message received : ", record.MessageId, record.Body)
+	log.Println("Message received : ", *record.MessageId, *record.Body)
 	time.Sleep(time.Second * 10)
 	log.Println("Message Proccessed")
 	return nil

@@ -63,7 +63,8 @@ type JobWorker struct {
 }
 
 func (job *JobWorker) HandleMessage(ctx context.Context, record *sqs.Message) error {
-	log.Println("Message received : ", record.MessageId, record.Body)
-	time.Sleep(time.Second * 30)
+	log.Println("Message received : ", *record.MessageId, *record.Body)
+	time.Sleep(time.Second * 10)
+	log.Println("Message Proccessed")
 	return nil
 }
