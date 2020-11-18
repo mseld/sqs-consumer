@@ -11,12 +11,13 @@ import (
 
 	"github.com/aws/aws-sdk-go/service/sqs"
 	"github.com/mseld/sqs-consumer/consumer"
+	"github.com/mseld/sqs-consumer/examples/utils"
 )
 
 func main() {
 	log.Println("Worker Started")
 
-	client := NewSqsClient()
+	client := utils.NewSqsClient()
 
 	ctx, cancel := context.WithCancel(context.Background())
 

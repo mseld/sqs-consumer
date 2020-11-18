@@ -11,12 +11,13 @@ import (
 
 	"github.com/aws/aws-sdk-go/service/sqs"
 	"github.com/mseld/sqs-consumer/consumer"
+	"github.com/mseld/sqs-consumer/examples/utils"
 )
 
 func main() {
 	log.Println("Worker Started")
 
-	client := NewSqsClient()
+	client := utils.NewSqsClient()
 
 	ctx, cancel := context.WithCancel(context.Background())
 
@@ -33,8 +34,6 @@ func main() {
 		WithInterval(100).
 		WithEnableDebug(true)
 
-	// wg.Add(1)
-	// go consumerWorker.Worker(consumer.HandlerFunc(handler), wg)
 	consumerWorker.WorkerPool(consumer.HandlerFunc(handler), wg, 4)
 
 	exit := make(chan os.Signal, 1)
@@ -45,18 +44,18 @@ func main() {
 
 	log.Println("Worker Received Shutdown Signal", sig)
 
-	time.AfterFunc(time.Second*10, cancel)
-
-	setTimeout(wg, time.Second*5)
-
 	consumerWorker.Close()
+
+	time.AfterFunc(time.Second*5, cancel)
+
+	setTimeout(wg, time.Second*30)
 
 	log.Println("All workers done, shutting down!")
 }
 
 func handler(ctx context.Context, record *sqs.Message) error {
 	log.Println("Message received : ", record.MessageId, record.Body)
-	time.Sleep(time.Second * 30)
+	time.Sleep(time.Second * 10)
 	log.Println("Message Proccessed")
 	return nil
 }

@@ -9,6 +9,24 @@ import (
 	"github.com/aws/aws-sdk-go/service/sqs"
 )
 
+type IConsumer interface {
+	Resume()
+	Pause()
+	Close()
+	Paused() bool
+	Closed() bool
+	Running() bool
+	Worker(h Handler, wg *sync.WaitGroup)
+	WorkerPool(h Handler, wg *sync.WaitGroup, poolSize int)
+	WithInterval(interval int) *Consumer
+	WithEnableDebug(enabled bool) *Consumer
+	WithBatchSize(batchSize int64) *Consumer
+	WithContext(ctx context.Context) *Consumer
+	WithReceiveWaitTimeSeconds(waitSeconds int64) *Consumer
+	WithReceiveVisibilityTimeout(visibilityTimeout int64) *Consumer
+	WithTerminateVisibilityTimeout(visibilityTimeout int64) *Consumer
+}
+
 type Consumer struct {
 	paused   bool
 	closed   bool
@@ -145,7 +163,11 @@ func (consumer *Consumer) Worker(h Handler, wg *sync.WaitGroup) {
 		default:
 		}
 
-		if !consumer.Running() {
+		if consumer.Closed() {
+			return
+		}
+
+		if consumer.Paused() {
 			time.Sleep(time.Millisecond * time.Duration(consumer.interval))
 			continue
 		}
@@ -172,12 +194,17 @@ func (consumer *Consumer) Worker(h Handler, wg *sync.WaitGroup) {
 // run launches goroutine per received message and wait for all message to be processed
 func (consumer *Consumer) run(h Handler, messages []*sqs.Message) {
 	wg := &sync.WaitGroup{}
-	for _, message := range messages {
+	for index, message := range messages {
 		select {
 		case <-consumer.ctx.Done():
-			// messages[i,len(messages)]
+			consumer.terminate(messages[index:])
 			return
 		default:
+		}
+
+		if consumer.Closed() {
+			consumer.terminate(messages[index:])
+			return
 		}
 
 		wg.Add(1)

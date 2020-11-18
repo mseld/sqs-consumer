@@ -16,23 +16,36 @@ func main() {
 
 	ctx, cancel := context.WithCancel(context.Background())
 
-	defer cancel()
+	wg := &sync.WaitGroup{}
 
-	queueUrl := "https://sqs.eu-west-1.amazonaws.com/0000000000000/queue"
+	queueUrl := "https://sqs.eu-west-1.amazonaws.com/763224933484/SAM-Chunk-Queue"
 
 	consumerWorker := consumer.New(client, queueUrl).
 		WithContext(ctx).
 		WithBatchSize(10).
-		WithWaitTimeSeconds(3).
-		WithVisibilityTimeout(30).
+		WithReceiveWaitTimeSeconds(5).
+		WithReceiveVisibilityTimeout(30).
+		WithTerminateVisibilityTimeout(5).
 		WithInterval(100).
 		WithEnableDebug(true)
 
-    worker := JobWorker{}
+	consumerWorker.WorkerPool(consumer.HandlerFunc(handler), wg, 4)
 
-	consumerWorker.Worker(worker)
+	exit := make(chan os.Signal, 1)
 
-	runtime.Goexit()
+	signal.Notify(exit, syscall.SIGINT, syscall.SIGTERM)
+
+	sig := <-exit
+
+	log.Println("Worker Received Shutdown Signal", sig)
+
+	cancel()
+
+	consumerWorker.Close()
+
+	wg.Wait()
+
+	log.Println("All workers done, shutting down!")
 }
 
 type JobWorker struct {
