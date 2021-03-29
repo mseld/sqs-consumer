@@ -215,7 +215,7 @@ func (client *SqsClient) TerminateVisibilityTimeoutBatchWithContext(ctx context.
 		params.Entries = append(params.Entries, &sqs.ChangeMessageVisibilityBatchRequestEntry{
 			Id:                message.MessageId,
 			ReceiptHandle:     message.ReceiptHandle,
-			VisibilityTimeout: aws.Int64(0),
+			VisibilityTimeout: aws.Int64(client.terminateVisibilityTimeout),
 		})
 	}
 
