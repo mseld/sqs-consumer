@@ -9,9 +9,9 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/aws/aws-sdk-go/service/sqs"
-	"github.com/mseld/sqs-consumer/consumer"
-	"github.com/mseld/sqs-consumer/examples/utils"
+	"github.com/aws/aws-sdk-go-v2/service/sqs/types"
+	"github.com/mseld/sqs-consumer/v2/consumer"
+	"github.com/mseld/sqs-consumer/v2/examples/utils"
 )
 
 func main() {
@@ -25,15 +25,18 @@ func main() {
 
 	queueUrl := "https://sqs.eu-west-1.amazonaws.com/0000000000/demo-queue"
 
-	consumerWorker := consumer.New(client, queueUrl).
-		WithContext(ctx).
-		WithWaitGroup(wg).
-		WithBatchSize(10).
-		WithReceiveWaitTimeSeconds(5).
-		WithReceiveVisibilityTimeout(30).
-		WithTerminateVisibilityTimeout(5).
-		WithInterval(100).
-		WithEnableDebug(true)
+	consumerWorker := consumer.New(
+		client,
+		queueUrl,
+		consumer.WithContext(ctx),
+		consumer.WithWaitGroup(wg),
+		consumer.WithInterval(100),
+		consumer.WithEnableDebug(true),
+		consumer.WithBatchSize(10),
+		consumer.WithReceiveWaitTimeSeconds(5),
+		consumer.WithReceiveVisibilityTimeout(30),
+		consumer.WithTerminateVisibilityTimeout(5),
+	)
 
 	worker := &JobWorker{}
 
@@ -62,9 +65,9 @@ type JobWorker struct {
 	Name string
 }
 
-func (job *JobWorker) HandleMessage(ctx context.Context, record *sqs.Message) error {
-	log.Println("Message received : ", *record.MessageId, *record.Body)
+func (job *JobWorker) HandleMessage(ctx context.Context, message types.Message) error {
+	log.Println("message received : ", message.MessageId, message.Body)
 	time.Sleep(time.Second * 10)
-	log.Println("Message Proccessed")
+	log.Println("message processed")
 	return nil
 }

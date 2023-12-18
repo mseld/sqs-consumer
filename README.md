@@ -4,7 +4,7 @@ sqs-consumer
 
 ### Example
 
-```go
+```golang
 func main() {
 	config := aws.NewConfig().
         WithRegion("eu-west-1").
@@ -20,21 +20,24 @@ func main() {
 
 	queueUrl := "https://sqs.eu-west-1.amazonaws.com/0000000000/demo-queue"
 
-	consumerWorker := consumer.New(client, queueUrl).
-		WithContext(ctx).
-		WithWaitGroup(wg).
-		WithBatchSize(10).
-		WithReceiveWaitTimeSeconds(5).
-		WithReceiveVisibilityTimeout(30).
-		WithTerminateVisibilityTimeout(5).
-		WithInterval(100).
-		WithEnableDebug(true)
+	consumerWorker := consumer.New(
+		client,
+		queueUrl,
+		consumer.WithContext(ctx),
+		consumer.WithWaitGroup(wg),
+		consumer.WithInterval(100),
+		consumer.WithEnableDebug(true),
+		consumer.WithBatchSize(10),
+		consumer.WithReceiveWaitTimeSeconds(5),
+		consumer.WithReceiveVisibilityTimeout(30),
+		consumer.WithTerminateVisibilityTimeout(5),
+	)
 
 	consumerWorker.WorkerPool(consumer.HandlerFunc(handler), 4)
 
 	exit := make(chan os.Signal, 1)
 
-	signal.Notify(exit, syscall.SIGINT, syscall.SIGTERM)
+	signal.Notify(exit, syscall.SIG, syscall.SIGTERM)
 
 	sig := <-exit
 
@@ -53,13 +56,9 @@ type JobWorker struct {
     Name string
 }
 
-func (job *JobWorker) HandleMessage(ctx context.Context, record *sqs.Message) error {
+func (job *JobWorker) HandleMessage(ctx context.Context, message types.Message) error {
     // ...
 	return nil
 }
 
 ```
-
-### ROAD MAP
-
--   Listen to context cancellation

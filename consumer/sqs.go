@@ -3,222 +3,172 @@ package consumer
 import (
 	"context"
 
-	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/service/sqs"
-	"github.com/aws/aws-sdk-go/service/sqs/sqsiface"
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/service/sqs"
+	"github.com/aws/aws-sdk-go-v2/service/sqs/types"
 )
 
-// ISqsClient interface
-type ISqsClient interface {
-	WithSqsClient(sqs *sqs.SQS) *SqsClient
-	WithQueueUrl(queueUrl string) *SqsClient
-	WithBatchSize(batchSize int64) *SqsClient
-	WithReceiveWaitTimeSeconds(waitSeconds int64) *SqsClient
-	WithReceiveVisibilityTimeout(visibilityTimeout int64) *SqsClient
-	WithTerminateVisibilityTimeout(visibilityTimeout int64) *SqsClient
-	GetQueueUrl(queueName string) string
-	GetQueueUrlWithContext(ctx context.Context, queueName string) string
-	ReceiveMessage() ([]*sqs.Message, error)
-	ReceiveMessageWithContext(ctx context.Context) ([]*sqs.Message, error)
-	SendMessage(message string, delaySeconds int64) (*sqs.SendMessageOutput, error)
-	SendMessageWithContext(ctx context.Context, message string, delaySeconds int64) (*sqs.SendMessageOutput, error)
-	DeleteMessage(message *sqs.Message) error
-	DeleteMessageWithContext(ctx context.Context, message *sqs.Message) error
-	DeleteMessageBatch(messages []*sqs.Message) error
-	DeleteMessageBatchWithContext(ctx context.Context, messages []*sqs.Message) error
-	TerminateVisibilityTimeout(message *sqs.Message) error
-	TerminateVisibilityTimeoutWithContext(ctx context.Context, message *sqs.Message) error
-	TerminateVisibilityTimeoutBatch(messages []*sqs.Message) error
-	TerminateVisibilityTimeoutBatchWithContext(ctx context.Context, messages []*sqs.Message) error
+var _ Queuer = (*SqsClient)(nil)
+
+type Queuer interface {
+	SetBatchSize(batchSize int32)
+	SetReceiveWaitTimeSeconds(waitSeconds int32)
+	SetReceiveVisibilityTimeout(visibilityTimeout int32)
+	SetTerminateVisibilityTimeout(visibilityTimeout int32)
+	GetQueueUrl(ctx context.Context, queueName string) string
+	ReceiveMessage(ctx context.Context) ([]types.Message, error)
+	DeleteMessage(ctx context.Context, message types.Message) error
+	DeleteMessageBatch(ctx context.Context, messages []types.Message) error
+	TerminateVisibilityTimeout(ctx context.Context, message types.Message) error
+	TerminateVisibilityTimeoutBatch(ctx context.Context, messages []types.Message) error
+	SendMessage(ctx context.Context, message string, delaySeconds int32) (*sqs.SendMessageOutput, error)
 }
 
-// SqsClient sqs client
+// SqsClient represents an SQS client
 type SqsClient struct {
 	queueUrl                   string
-	batchSize                  int64
-	receiveMessageWaitSeconds  int64
-	receiveVisibilityTimeout   int64
-	terminateVisibilityTimeout int64
-	sqs                        sqsiface.SQSAPI
+	batchSize                  int32
+	receiveMessageWaitSeconds  int32
+	receiveVisibilityTimeout   int32
+	terminateVisibilityTimeout int32
+	client                     *sqs.Client
 }
 
-// NewSQSClient create new sqs client
-func NewSQSClient(sqs *sqs.SQS, queueUrl string) ISqsClient {
-	client := &SqsClient{
+// NewSQSClient creates a new SQS client
+func NewSQSClient(client *sqs.Client, queueUrl string) *SqsClient {
+	return &SqsClient{
 		queueUrl:                   queueUrl,
 		batchSize:                  BatchSizeLimit,
 		receiveMessageWaitSeconds:  ReceiveMessageWaitSecondsLimit,
 		receiveVisibilityTimeout:   DefaultReceiveVisibilityTimeout,
 		terminateVisibilityTimeout: DefaultTerminateVisibilityTimeout,
-		sqs:                        sqs,
+		client:                     client,
 	}
-
-	return client
 }
 
-func (client *SqsClient) WithSqsClient(sqs *sqs.SQS) *SqsClient {
-	client.sqs = sqs
-	return client
+func (s *SqsClient) SetBatchSize(batchSize int32) {
+	s.batchSize = batchSize
 }
 
-func (client *SqsClient) WithQueueUrl(queueUrl string) *SqsClient {
-	client.queueUrl = queueUrl
-	return client
+func (s *SqsClient) SetReceiveWaitTimeSeconds(waitSeconds int32) {
+	s.receiveMessageWaitSeconds = waitSeconds
 }
 
-func (client *SqsClient) WithBatchSize(batchSize int64) *SqsClient {
-	client.batchSize = batchSize
-	return client
+func (s *SqsClient) SetReceiveVisibilityTimeout(visibilityTimeout int32) {
+	s.receiveVisibilityTimeout = visibilityTimeout
 }
 
-func (client *SqsClient) WithReceiveWaitTimeSeconds(waitSeconds int64) *SqsClient {
-	client.receiveMessageWaitSeconds = waitSeconds
-	return client
-}
-
-func (client *SqsClient) WithReceiveVisibilityTimeout(visibilityTimeout int64) *SqsClient {
-	client.receiveVisibilityTimeout = visibilityTimeout
-	return client
-}
-
-func (client *SqsClient) WithTerminateVisibilityTimeout(visibilityTimeout int64) *SqsClient {
-	client.terminateVisibilityTimeout = visibilityTimeout
-	return client
+func (s *SqsClient) SetTerminateVisibilityTimeout(visibilityTimeout int32) {
+	s.terminateVisibilityTimeout = visibilityTimeout
 }
 
 // GetQueueUrl get queue url
-func (client *SqsClient) GetQueueUrl(queueName string) string {
-	return client.GetQueueUrlWithContext(context.Background(), queueName)
-}
-
-// GetQueueUrlWithContext get queue url
-func (client *SqsClient) GetQueueUrlWithContext(ctx context.Context, queueName string) string {
+func (s *SqsClient) GetQueueUrl(ctx context.Context, queueName string) string {
 	params := &sqs.GetQueueUrlInput{
 		QueueName: aws.String(queueName),
 	}
 
-	response, err := client.sqs.GetQueueUrlWithContext(ctx, params)
+	response, err := s.client.GetQueueUrl(ctx, params)
 	if err != nil {
 		return ""
 	}
 
-	return aws.StringValue(response.QueueUrl)
+	return aws.ToString(response.QueueUrl)
 }
 
-// ReceiveMessage retrive message from sqs queue
-func (client *SqsClient) ReceiveMessage() ([]*sqs.Message, error) {
-	return client.ReceiveMessageWithContext(context.Background())
-}
-
-// ReceiveMessageWithContext retrive message from sqs queue
-func (client *SqsClient) ReceiveMessageWithContext(ctx context.Context) ([]*sqs.Message, error) {
+// ReceiveMessage retrieves messages from the SQS queue
+func (s *SqsClient) ReceiveMessage(ctx context.Context) ([]types.Message, error) {
 	params := &sqs.ReceiveMessageInput{
-		AttributeNames: []*string{
-			aws.String(sqs.MessageSystemAttributeNameSentTimestamp),
-			aws.String(sqs.MessageSystemAttributeNameApproximateReceiveCount),
+		AttributeNames: []types.QueueAttributeName{
+			types.QueueAttributeNameApproximateNumberOfMessages,
+			types.QueueAttributeNameVisibilityTimeout,
 		},
-		MessageAttributeNames: []*string{
-			aws.String(sqs.QueueAttributeNameAll),
+		MessageAttributeNames: []string{
+			string(types.MessageSystemAttributeNameSenderId),
+			string(types.MessageSystemAttributeNameSentTimestamp),
+			string(types.MessageSystemAttributeNameApproximateReceiveCount),
+			string(types.MessageSystemAttributeNameApproximateFirstReceiveTimestamp),
+			string(types.MessageSystemAttributeNameSequenceNumber),
+			string(types.MessageSystemAttributeNameMessageDeduplicationId),
+			string(types.MessageSystemAttributeNameMessageGroupId),
+			string(types.MessageSystemAttributeNameAWSTraceHeader),
+			string(types.MessageSystemAttributeNameDeadLetterQueueSourceArn),
 		},
-		QueueUrl:            aws.String(client.queueUrl),
-		MaxNumberOfMessages: aws.Int64(client.batchSize),
-		VisibilityTimeout:   aws.Int64(client.receiveVisibilityTimeout),
-		WaitTimeSeconds:     aws.Int64(client.receiveMessageWaitSeconds),
+		QueueUrl:            aws.String(s.queueUrl),
+		MaxNumberOfMessages: s.batchSize,
+		VisibilityTimeout:   s.receiveVisibilityTimeout,
+		WaitTimeSeconds:     s.receiveMessageWaitSeconds,
 	}
 
-	result, err := client.sqs.ReceiveMessageWithContext(ctx, params)
+	result, err := s.client.ReceiveMessage(ctx, params)
 	return result.Messages, err
 }
 
-// SendMessage send message to sqs queue
-func (client *SqsClient) SendMessage(message string, delaySeconds int64) (*sqs.SendMessageOutput, error) {
-	return client.SendMessageWithContext(context.Background(), message, delaySeconds)
-}
-
-// SendMessageWithContext send message to sqs queue
-func (client *SqsClient) SendMessageWithContext(ctx context.Context, message string, delaySeconds int64) (*sqs.SendMessageOutput, error) {
+// SendMessage delivers a message to the specified queue
+func (s *SqsClient) SendMessage(ctx context.Context, message string, delaySeconds int32) (*sqs.SendMessageOutput, error) {
 	params := &sqs.SendMessageInput{
-		QueueUrl:     aws.String(client.queueUrl),
-		DelaySeconds: aws.Int64(delaySeconds),
+		QueueUrl:     aws.String(s.queueUrl),
+		DelaySeconds: delaySeconds,
 		MessageBody:  aws.String(message),
 	}
-	return client.sqs.SendMessageWithContext(ctx, params)
+
+	return s.client.SendMessage(ctx, params)
 }
 
-// DeleteMessage delete message from sqs queue
-func (client *SqsClient) DeleteMessage(message *sqs.Message) error {
-	return client.DeleteMessageWithContext(context.Background(), message)
-}
-
-// DeleteMessageWithContext delete message from sqs queue
-func (client *SqsClient) DeleteMessageWithContext(ctx context.Context, message *sqs.Message) error {
+// DeleteMessage deletes the specified message from the specified queue
+func (s *SqsClient) DeleteMessage(ctx context.Context, message types.Message) error {
 	params := &sqs.DeleteMessageInput{
-		QueueUrl:      aws.String(client.queueUrl),
+		QueueUrl:      aws.String(s.queueUrl),
 		ReceiptHandle: message.ReceiptHandle,
 	}
 
-	_, err := client.sqs.DeleteMessageWithContext(ctx, params)
+	_, err := s.client.DeleteMessage(ctx, params)
 	return err
 }
 
-// DeleteMessageBatch delete messages from sqs queue
-func (client *SqsClient) DeleteMessageBatch(messages []*sqs.Message) error {
-	return client.DeleteMessageBatchWithContext(context.Background(), messages)
-}
-
-// DeleteMessageBatchWithContext delete messages from sqs queue
-func (client *SqsClient) DeleteMessageBatchWithContext(ctx context.Context, messages []*sqs.Message) error {
+// DeleteMessageBatch deletes up to ten messages from the specified queue
+func (s *SqsClient) DeleteMessageBatch(ctx context.Context, messages []types.Message) error {
 	params := &sqs.DeleteMessageBatchInput{
-		QueueUrl: aws.String(client.queueUrl),
+		QueueUrl: aws.String(s.queueUrl),
 	}
 
 	for _, message := range messages {
-		params.Entries = append(params.Entries, &sqs.DeleteMessageBatchRequestEntry{
+		params.Entries = append(params.Entries, types.DeleteMessageBatchRequestEntry{
 			Id:            message.MessageId,
 			ReceiptHandle: message.ReceiptHandle,
 		})
 	}
 
-	_, err := client.sqs.DeleteMessageBatchWithContext(ctx, params)
+	_, err := s.client.DeleteMessageBatch(ctx, params)
 	return err
 }
 
-// TerminateVisibilityTimeout make message visible to be processed from another worker
-func (client *SqsClient) TerminateVisibilityTimeout(message *sqs.Message) error {
-	return client.TerminateVisibilityTimeoutWithContext(context.Background(), message)
-}
-
-// TerminateVisibilityTimeoutWithContext make message visible to be processed from another worker
-func (client *SqsClient) TerminateVisibilityTimeoutWithContext(ctx context.Context, message *sqs.Message) error {
+// TerminateVisibilityTimeout changes the visibility timeout of a specified message in a queue to a new value
+func (s *SqsClient) TerminateVisibilityTimeout(ctx context.Context, message types.Message) error {
 	params := &sqs.ChangeMessageVisibilityInput{
-		QueueUrl:          aws.String(client.queueUrl),
+		QueueUrl:          aws.String(s.queueUrl),
 		ReceiptHandle:     message.ReceiptHandle,
-		VisibilityTimeout: aws.Int64(client.terminateVisibilityTimeout),
+		VisibilityTimeout: s.terminateVisibilityTimeout,
 	}
 
-	_, err := client.sqs.ChangeMessageVisibilityWithContext(ctx, params)
+	_, err := s.client.ChangeMessageVisibility(ctx, params)
 	return err
 }
 
-// TerminateVisibilityTimeoutBatch make messages visible to be processed from another worker
-func (client *SqsClient) TerminateVisibilityTimeoutBatch(messages []*sqs.Message) error {
-	return client.TerminateVisibilityTimeoutBatchWithContext(context.Background(), messages)
-}
-
-// TerminateVisibilityTimeoutBatchWithContext make messages visible to be processed from another worker
-func (client *SqsClient) TerminateVisibilityTimeoutBatchWithContext(ctx context.Context, messages []*sqs.Message) error {
+// TerminateVisibilityTimeoutBatch changes the visibility timeout of multiple messages
+func (s *SqsClient) TerminateVisibilityTimeoutBatch(ctx context.Context, messages []types.Message) error {
 	params := &sqs.ChangeMessageVisibilityBatchInput{
-		QueueUrl: aws.String(client.queueUrl),
+		QueueUrl: aws.String(s.queueUrl),
 	}
 
 	for _, message := range messages {
-		params.Entries = append(params.Entries, &sqs.ChangeMessageVisibilityBatchRequestEntry{
+		params.Entries = append(params.Entries, types.ChangeMessageVisibilityBatchRequestEntry{
 			Id:                message.MessageId,
 			ReceiptHandle:     message.ReceiptHandle,
-			VisibilityTimeout: aws.Int64(client.terminateVisibilityTimeout),
+			VisibilityTimeout: s.terminateVisibilityTimeout,
 		})
 	}
 
-	_, err := client.sqs.ChangeMessageVisibilityBatchWithContext(ctx, params)
+	_, err := s.client.ChangeMessageVisibilityBatch(ctx, params)
 	return err
 }
